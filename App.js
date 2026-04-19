@@ -210,9 +210,9 @@ const SlowRoads = () => {
       z: z,
       speed: speed,
       color: color,
-      width: 600,
-      height: 350,
-      length: 800
+      width: 450,  // Increased for better visibility
+      height: 220, 
+      length: 600
     };
   }, []);
 
@@ -260,35 +260,118 @@ const SlowRoads = () => {
   const getColors = useCallback(() => {
     const colors = {
       day: {
-        sky: ['#87CEEB', '#E0F6FF'],
-        horizon: '#FFE4B5',
-        grass: '#5ab552',
-        road: '#6b6b6b',
+        sky: ['#4facfe', '#00f2fe'],
+        horizon: '#e0f6ff',
+        grass: '#45a049',
+        road: '#4a4a4a',
         roadLine: '#ffffff',
-        tree: '#228B22',
-        trunk: '#5D4037'
+        tree: '#2d5a27',
+        trunk: '#5d4037',
+        mountains: ['#8baaaa', '#708888', '#506666']
       },
       sunset: {
-        sky: ['#FF6B35', '#F7931E'],
-        horizon: '#FFB347',
-        grass: '#5a8f52',
-        road: '#5a5a5a',
-        roadLine: '#ffa500',
-        tree: '#2F4F2F',
-        trunk: '#3E2723'
+        sky: ['#ff5f6d', '#ffc371'],
+        horizon: '#ff9a9e',
+        grass: '#3d5a3a',
+        road: '#333333',
+        roadLine: '#ffcc33',
+        tree: '#1e3a1e',
+        trunk: '#3e2723',
+        mountains: ['#6e4545', '#4d3030', '#2d1b1b']
       },
       night: {
-        sky: ['#0B1929', '#1a2332'],
-        horizon: '#2C3E50',
-        grass: '#1a3a1a',
-        road: '#3a3a3a',
-        roadLine: '#ffffff',
-        tree: '#0D3D0D',
-        trunk: '#212121'
+        sky: ['#0f2027', '#203a43'],
+        horizon: '#2c3e50',
+        grass: '#1a2e1a',
+        road: '#1a1a1a',
+        roadLine: '#666666',
+        tree: '#0a1a0a',
+        trunk: '#1a1a1a',
+        mountains: ['#1c2833', '#17202a', '#0b131a']
       }
     };
     return colors[settings.timeOfDay];
   }, [settings.timeOfDay]);
+
+  const renderBackground = (ctx, colors, game) => {
+    // Sky
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, 300);
+    skyGradient.addColorStop(0, colors.sky[0]);
+    skyGradient.addColorStop(1, colors.sky[1]);
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, 800, 300);
+
+    // Sun/Moon
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, 800, 300);
+    ctx.clip();
+
+    if (settings.timeOfDay === 'day') {
+      const sunGlow = ctx.createRadialGradient(700, 100, 10, 700, 100, 60);
+      sunGlow.addColorStop(0, '#fff');
+      sunGlow.addColorStop(0.2, '#fffae0');
+      sunGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = sunGlow;
+      ctx.fillRect(640, 40, 120, 120);
+      
+      ctx.fillStyle = '#fffbe6';
+      ctx.beginPath();
+      ctx.arc(700, 100, 25, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (settings.timeOfDay === 'sunset') {
+      const sunX = 400 + (game.curve * 0.1);
+      const sunY = 280;
+      const sunGlow = ctx.createRadialGradient(sunX, sunY, 20, sunX, sunY, 150);
+      sunGlow.addColorStop(0, '#ff9a9e');
+      sunGlow.addColorStop(0.5, 'rgba(255, 126, 95, 0.3)');
+      sunGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = sunGlow;
+      ctx.fillRect(sunX - 150, sunY - 150, 300, 300);
+
+      ctx.fillStyle = '#fff3e0';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 50, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (settings.timeOfDay === 'night') {
+      ctx.fillStyle = '#f0e68c';
+      ctx.beginPath();
+      ctx.arc(150, 80, 20, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      for (let i = 0; i < 100; i++) {
+        const x = (Math.sin(i * 123.45) * 0.5 + 0.5) * 800;
+        const y = (Math.cos(i * 543.21) * 0.5 + 0.5) * 250;
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+    }
+    ctx.restore();
+
+    // Parallax Mountains
+    colors.mountains.forEach((color, i) => {
+      const offset = (game.position * 0.005 * (i + 1) + game.curve * 0.05 * (i + 1)) % 800;
+      ctx.fillStyle = color;
+      
+      const drawMountains = (startX) => {
+        ctx.beginPath();
+        ctx.moveTo(startX, 350); // Extended down
+        for (let x = 0; x <= 800; x += 100) {
+          const height = 40 + Math.sin((x + startX) * 0.01) * 30 + (i * 20);
+          ctx.lineTo(startX + x, 300 - height);
+        }
+        ctx.lineTo(startX + 800, 350); // Extended down
+        ctx.fill();
+      };
+
+      drawMountains(-offset);
+      drawMountains(800 - offset);
+    });
+
+    // Solid horizon overlap
+    ctx.fillStyle = colors.horizon;
+    ctx.fillRect(0, 290, 800, 20);
+  };
 
   const updateGame = useCallback(() => {
     const game = gameRef.current;
@@ -487,6 +570,85 @@ const SlowRoads = () => {
     };
   }, []);
 
+  const renderPlayer = (ctx, game, colors) => {
+    const player = game.player;
+    const bounce = Math.sin(game.frame * 0.2) * 2;
+    const steer = player.turnSpeed * 0.05;
+    
+    const x = 400;
+    const y = 500 + bounce;
+    const w = 180;
+    const h = 80;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(steer * 0.1);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.3, w * 0.5, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body - Main Shell (Red Sports Car)
+    ctx.fillStyle = '#cc0000';
+    // Lower body
+    ctx.beginPath();
+    ctx.roundRect(-w * 0.5, -h * 0.2, w, h * 0.4, 10);
+    ctx.fill();
+    
+    // Upper body / Roof
+    ctx.fillStyle = '#ee0000';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.35, -h * 0.2);
+    ctx.lineTo(-w * 0.25, -h * 0.6);
+    ctx.lineTo(w * 0.25, -h * 0.6);
+    ctx.lineTo(w * 0.35, -h * 0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Windows
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.28, -h * 0.22);
+    ctx.lineTo(-w * 0.2, -h * 0.52);
+    ctx.lineTo(w * 0.2, -h * 0.52);
+    ctx.lineTo(w * 0.28, -h * 0.22);
+    ctx.closePath();
+    ctx.fill();
+
+    // Taillights
+    const lightW = w * 0.15;
+    const lightH = h * 0.1;
+    ctx.fillStyle = player.speed > 0 ? '#ff0000' : '#880000';
+    if (game.keys['ArrowDown'] || game.keys['s']) ctx.fillStyle = '#ff5555';
+    
+    // Left Light
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.fillRect(-w * 0.45, -h * 0.1, lightW, lightH);
+    // Right Light
+    ctx.fillRect(w * 0.45 - lightW, -h * 0.1, lightW, lightH);
+    ctx.shadowBlur = 0;
+
+    // Exhaust Flames (If boosting)
+    if (player.boosting) {
+      ctx.fillStyle = '#ffaa00';
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ff5500';
+      const flameH = 20 + Math.random() * 20;
+      ctx.fillRect(-w * 0.3, 10, 15, flameH);
+      ctx.fillRect(w * 0.3 - 15, 10, 15, flameH);
+      ctx.shadowBlur = 0;
+    }
+
+    // Rear Spoiler
+    ctx.fillStyle = '#990000';
+    ctx.fillRect(-w * 0.48, -h * 0.25, w * 0.96, h * 0.05);
+
+    ctx.restore();
+  };
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -503,41 +665,22 @@ const SlowRoads = () => {
       ctx.translate(shakeX, shakeY);
     }
     
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, 400);
-    skyGradient.addColorStop(0, colors.sky[0]);
-    skyGradient.addColorStop(1, colors.sky[1]);
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, 800, 600);
-    
-    // Clouds
+    renderBackground(ctx, colors, game);
+
+    // Fill gap between horizon and road with a solid ground color
+    ctx.fillStyle = colors.grass;
+    ctx.fillRect(0, 300, 800, 300);
+
+    // Clouds (Still useful for movement)
     game.clouds.forEach(cloud => {
       const p = project3D(cloud.x, cloud.y, cloud.z, game.camera.x, game.camera.y, game.position);
-      if (p.scale > 0 && p.y < 350) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      if (p.scale > 0 && p.y < 250) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.beginPath();
         ctx.arc(p.x, p.y, cloud.size * p.scale, 0, Math.PI * 2);
         ctx.fill();
       }
     });
-
-    if (settings.timeOfDay === 'day') {
-      ctx.fillStyle = '#FFD700';
-      ctx.beginPath();
-      ctx.arc(700, 100, 40, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (settings.timeOfDay === 'night') {
-      ctx.fillStyle = '#F0E68C';
-      ctx.beginPath();
-      ctx.arc(150, 120, 35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < 50; i++) {
-        ctx.fillRect((i * 97) % 800, (i * 127) % 250, 2, 2);
-      }
-    }
-    
-    ctx.fillStyle = colors.horizon;
-    ctx.fillRect(0, 300, 800, 50);
     
     const startSegmentIndex = Math.floor(game.position / game.segmentLength);
     
@@ -582,24 +725,97 @@ const SlowRoads = () => {
       ctx.lineTo(p3.x, p3.y);
       ctx.closePath();
       ctx.fill();
+
+      // Guardrails
+      const railW = 50 * p1.scale;
+      const nextRailW = 50 * p3.scale;
+      ctx.fillStyle = segmentIndex % 2 === 0 ? '#cbd5e1' : '#94a3b8';
       
-      // Road Lines
+      // Left Rail
+      ctx.beginPath();
+      ctx.moveTo(p1.x - railW, p1.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.lineTo(p3.x - nextRailW, p3.y);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Right Rail
+      ctx.beginPath();
+      ctx.moveTo(p2.x, p2.y);
+      ctx.lineTo(p2.x + railW, p2.y);
+      ctx.lineTo(p4.x + nextRailW, p4.y);
+      ctx.lineTo(p4.x, p4.y);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Road Lines (Multi-lane)
+      const centerX1 = (p1.x + p2.x) / 2;
+      const nextCenterX1 = (p3.x + p4.x) / 2;
+      const laneWidth = (p2.x - p1.x) / 4;
+      const nextLaneWidth = (p4.x - p3.x) / 4;
+
       if (segmentIndex % 3 === 0) {
-        const lineWidth = 15 * p1.scale;
         ctx.fillStyle = colors.roadLine;
-        const centerX = (p1.x + p2.x) / 2;
-        const nextCenterX = (p3.x + p4.x) / 2;
-        ctx.beginPath();
-        ctx.moveTo(centerX - lineWidth / 2, p1.y);
-        ctx.lineTo(centerX + lineWidth / 2, p1.y);
-        ctx.lineTo(nextCenterX + (15 * p3.scale) / 2, p3.y);
-        ctx.lineTo(nextCenterX - (15 * p3.scale) / 2, p3.y);
-        ctx.closePath();
-        ctx.fill();
+        for (let l = 1; l < 4; l++) {
+          const lx1 = p1.x + laneWidth * l;
+          const nlx1 = p3.x + nextLaneWidth * l;
+          const lw = 10 * p1.scale;
+          const nlw = 10 * p3.scale;
+          
+          ctx.beginPath();
+          ctx.moveTo(lx1 - lw / 2, p1.y);
+          ctx.lineTo(lx1 + lw / 2, p1.y);
+          ctx.lineTo(nlx1 + nlw / 2, p3.y);
+          ctx.lineTo(nlx1 - nlw / 2, p3.y);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
 
       // RENDER OBJECTS FOR THIS SEGMENT
       
+      // Render Trees in this segment (Improved Pine Trees)
+      game.trees.forEach(tree => {
+        const treeSegmentIndex = Math.floor(tree.z / game.segmentLength);
+        if (treeSegmentIndex === segmentIndex) {
+           const p = project3D(tree.x + segment.curve, segment.y, tree.z, game.camera.x, game.camera.y, game.position);
+           if (p.scale > 0 && p.y > 250 && p.y < 800) {
+             const w = tree.width * p.scale;
+             const h = tree.height * p.scale;
+             
+             // Trunk
+             ctx.fillStyle = colors.trunk;
+             ctx.fillRect(p.x - w * 0.1, p.y - h * 0.2, w * 0.2, h * 0.2);
+             
+             // Pine Layers
+             ctx.fillStyle = colors.tree;
+             for (let j = 0; j < 3; j++) {
+               const layerW = w * (1 - j * 0.2);
+               const layerH = h * 0.4;
+               const layerY = p.y - h * 0.2 - (j * h * 0.25);
+               
+               ctx.beginPath();
+               ctx.moveTo(p.x - layerW, layerY);
+               ctx.lineTo(p.x, layerY - layerH);
+               ctx.lineTo(p.x + layerW, layerY);
+               ctx.closePath();
+               ctx.fill();
+               
+               // Shading on one side
+               ctx.fillStyle = 'rgba(0,0,0,0.1)';
+               ctx.beginPath();
+               ctx.moveTo(p.x, layerY - layerH);
+               ctx.lineTo(p.x + layerW, layerY);
+               ctx.lineTo(p.x, layerY);
+               ctx.closePath();
+               ctx.fill();
+               ctx.fillStyle = colors.tree;
+             }
+           }
+        }
+      });
+
       // Render Obstacles (Cars) in this segment
       game.obstacles.forEach(obs => {
         const obsSegmentIndex = Math.floor(obs.z / game.segmentLength);
@@ -608,67 +824,42 @@ const SlowRoads = () => {
           if (p.scale > 0 && p.y > 250 && p.y < 800) {
             const w = obs.width * p.scale;
             const h = obs.height * p.scale;
+            
             // Car Body
             ctx.fillStyle = obs.color;
-            ctx.fillRect(p.x - w / 2, p.y - h, w, h * 0.6);
-            ctx.fillRect(p.x - w / 2 - (w * 0.1), p.y - h * 0.4, w * 1.2, h * 0.4);
+            ctx.beginPath();
+            ctx.roundRect(p.x - w / 2, p.y - h, w, h * 0.7, 4);
+            ctx.fill();
+            
             // Windows
-            ctx.fillStyle = '#111';
-            ctx.fillRect(p.x - w / 3, p.y - h * 0.9, w / 1.5, h * 0.3);
-            // Taillights
-            ctx.fillStyle = '#ff0000';
-            const lightW = w * 0.15;
-            const lightH = h * 0.15;
-            // Add glow for taillights
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff0000';
-            ctx.fillRect(p.x - w / 2, p.y - h * 0.3, lightW, lightH);
-            ctx.fillRect(p.x + w / 2 - lightW, p.y - h * 0.3, lightW, lightH);
-            ctx.shadowBlur = 0; // Reset shadow
-
-            // Car Outline for visibility
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(p.x - w / 2, p.y - h, w, h * 0.6);
-            ctx.strokeRect(p.x - w / 2 - (w * 0.1), p.y - h * 0.4, w * 1.2, h * 0.4);
-            
-            // Tires
-            ctx.fillStyle = '#000';
-            const tireW = w * 0.2;
-            const tireH = h * 0.2;
-            ctx.fillRect(p.x - w / 2 - tireW / 2, p.y - tireH, tireW, tireH);
-            ctx.fillRect(p.x + w / 2 - tireW / 2, p.y - tireH, tireW, tireH);
-            
-            // Shadow (Better Depth)
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.beginPath();
-            ctx.ellipse(p.x, p.y, w * 0.7, h * 0.15, 0, 0, Math.PI * 2);
+            ctx.moveTo(p.x - w * 0.4, p.y - h * 0.95);
+            ctx.lineTo(p.x - w * 0.35, p.y - h * 0.7);
+            ctx.lineTo(p.x + w * 0.35, p.y - h * 0.7);
+            ctx.lineTo(p.x + w * 0.4, p.y - h * 0.95);
+            ctx.closePath();
+            ctx.fill();
+
+            // Taillights
+            ctx.fillStyle = '#ff0000';
+            ctx.shadowBlur = 10 * p.scale;
+            ctx.shadowColor = '#ff0000';
+            ctx.fillRect(p.x - w * 0.45, p.y - h * 0.6, w * 0.2, h * 0.2);
+            ctx.fillRect(p.x + w * 0.25, p.y - h * 0.6, w * 0.2, h * 0.2);
+            ctx.shadowBlur = 0;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y, w * 0.6, h * 0.2, 0, 0, Math.PI * 2);
             ctx.fill();
           }
         }
       });
+    }
 
-      // Render Trees in this segment
-      game.trees.forEach(tree => {
-        const treeSegmentIndex = Math.floor(tree.z / game.segmentLength);
-        if (treeSegmentIndex === segmentIndex) {
-           const p = project3D(tree.x + segment.curve, segment.y, tree.z, game.camera.x, game.camera.y, game.position);
-           if (p.scale > 0 && p.y > 250 && p.y < 800) {
-             const w = tree.width * p.scale;
-             const h = tree.height * p.scale;
-             ctx.fillStyle = colors.trunk;
-             ctx.fillRect(p.x - w / 4, p.y - h / 4, w / 2, h / 4);
-             ctx.fillStyle = colors.tree;
-             ctx.beginPath();
-             ctx.moveTo(p.x - w, p.y - h / 4);
-             ctx.lineTo(p.x, p.y - h);
-             ctx.lineTo(p.x + w, p.y - h / 4);
-             ctx.closePath();
-             ctx.fill();
-           }
-        }
-      });
-      }
+    renderPlayer(ctx, game, colors);
 
       // Speed Lines Effect (High Speed)
       if (player.speed > 220) {
@@ -697,53 +888,80 @@ const SlowRoads = () => {
 
       ctx.restore();
 
-      // Direct Dashboard Rendering (Avoids React Batching Lag)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';    ctx.fillRect(10, 10, 220, 150);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(10, 10, 220, 150);
-    
-    const displaySpeed = Math.floor(Math.abs(player.speed) * 1.5);
-    const speedDisplayStr = player.speed < 0 ? `-${displaySpeed}` : `${displaySpeed}`;
-    // Removed unused distanceDisplay
-    
-    ctx.font = 'bold 18px Arial';
-    ctx.fillStyle = player.speed < 0 ? '#ef4444' : '#10b981';
-    ctx.fillText(`Speed: ${speedDisplayStr} km/h`, 25, 40);
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`Score: ${Math.floor(game.score)}`, 25, 70);
-    
-    // Overtakes Status
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText(`Overtakes: ${game.overtakes}`, 25, 95);
-    
-    const gearDisplay = player.gear === 'forward' ? 'F' : player.gear === 'reverse' ? 'R' : 'N';
-    const gearColor = player.gear === 'reverse' ? '#ef4444' : player.gear === 'forward' ? '#10b981' : '#9ca3af';
-    ctx.fillStyle = gearColor;
-    ctx.font = 'bold 28px Arial';
-    ctx.fillText(`Gear: ${gearDisplay}`, 25, 125);
-    
-    // Boost Meter
-    ctx.fillStyle = '#444';
-    ctx.fillRect(25, 135, 150, 10);
-    ctx.fillStyle = player.boosting ? '#3b82f6' : '#60a5fa';
-    ctx.fillRect(25, 135, 150 * (player.boost / 100), 10);
-    if (player.boosting) {
-       ctx.font = 'italic bold 14px Arial';
-       ctx.fillStyle = '#60a5fa';
-       ctx.fillText('BOOST!', 185, 145);
-    }
+      // Direct Dashboard Rendering (Modern HUD)
+      const drawHUDBox = (x, y, w, h, label, value, color) => {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 8);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
-    ctx.font = 'bold 16px Arial';
-    ctx.fillStyle = audioEnabled ? '#10b981' : '#ef4444';
-    ctx.fillText(audioEnabled ? '🔊 Audio ON' : '🔇 Audio OFF', 25, 170);
-    
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(10, 560, 780, 30);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '14px Arial';
-    ctx.fillText('⬆️ Forward  ⬇️ Reverse  ⬅️➡️ Steer  Shift Boost', 20, 580);
+        ctx.font = 'bold 12px Inter, Arial';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText(label.toUpperCase(), x + 12, y + 20);
+
+        ctx.font = 'bold 24px Inter, Arial';
+        ctx.fillStyle = color || '#fff';
+        ctx.fillText(value, x + 12, y + 48);
+      };
+
+      const displaySpeed = Math.floor(Math.abs(player.speed) * 1.5);
+      const speedColor = player.speed > 150 ? '#f87171' : player.speed > 100 ? '#fbbf24' : '#34d399';
+      
+      drawHUDBox(20, 20, 160, 65, 'Speed', `${displaySpeed} KM/H`, speedColor);
+      drawHUDBox(190, 20, 160, 65, 'Score', Math.floor(game.score).toLocaleString(), '#60a5fa');
+      drawHUDBox(360, 20, 160, 65, 'Overtakes', game.overtakes, '#fbbf24');
+
+      // Boost and Gear in a special corner box
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(620, 20, 160, 100, 8);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+      ctx.stroke();
+
+      ctx.font = 'bold 12px Inter, Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillText('GEAR', 632, 40);
+      
+      const gearDisplay = player.gear === 'forward' ? 'D' : player.gear === 'reverse' ? 'R' : 'N';
+      ctx.font = 'bold 32px Inter, Arial';
+      ctx.fillStyle = player.gear === 'reverse' ? '#f87171' : '#34d399';
+      ctx.fillText(gearDisplay, 632, 75);
+
+      ctx.font = 'bold 12px Inter, Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillText('BOOST', 680, 40);
+      
+      // Boost Bar
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.roundRect(680, 55, 80, 20, 4);
+      ctx.fill();
+      
+      const boostGradient = ctx.createLinearGradient(680, 0, 760, 0);
+      boostGradient.addColorStop(0, '#3b82f6');
+      boostGradient.addColorStop(1, '#60a5fa');
+      ctx.fillStyle = boostGradient;
+      ctx.beginPath();
+      ctx.roundRect(680, 55, 80 * (player.boost / 100), 20, 4);
+      ctx.fill();
+
+      // Audio Status
+      ctx.font = 'bold 12px Inter, Arial';
+      ctx.fillStyle = audioEnabled ? '#34d399' : '#f87171';
+      ctx.fillText(audioEnabled ? 'AUDIO READY' : 'AUDIO MUTED', 632, 105);
+
+      // Bottom Control Bar
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+      ctx.fillRect(0, 570, 800, 30);
+      ctx.font = '12px Inter, Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.textAlign = 'center';
+      ctx.fillText('WASD / ARROWS TO DRIVE  •  SHIFT TO BOOST  •  ESC FOR SETTINGS', 400, 588);
+      ctx.textAlign = 'left';
 
     // CRASH OVERLAY
     if (player.crashed) {
